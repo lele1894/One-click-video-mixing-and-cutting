@@ -425,6 +425,16 @@ if __name__ == "__main__":
     root = Tk()
     root.title("视频场景分割工具")
     root.geometry("700x500")
+    
+    # 设置图标
+    try:
+        # 获取当前脚本所在目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(current_dir, "app.ico")
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        log(f"加载图标失败: {e}")
 
     # 检查 FFmpeg 是否已安装
     if not check_ffmpeg():
