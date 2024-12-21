@@ -11,7 +11,7 @@ import os
 import time
 import subprocess
 import threading
-from tkinter import Tk, Label, Button, filedialog, StringVar, DoubleVar, messagebox, Scale, Listbox, END, Scrollbar, RIGHT, Y, BooleanVar, Checkbutton
+from tkinter import Tk, Label, Button, filedialog, StringVar, DoubleVar, messagebox, Scale, Listbox, END, Scrollbar, RIGHT, Y, BooleanVar, Checkbutton, Frame, LabelFrame, LEFT
 import random
 from pathlib import Path
 import json
@@ -42,16 +42,6 @@ def log(message):
     log_list.insert(END, f"[日志] {message}")
     log_list.yview(END)  # 滚动到最新日志
 
-# 装饰器：用于计算函数运行时间
-def time_it(func):
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        result = func(*args, **kwargs)
-        elapsed_time = time.time() - start_time
-        log(f"{func.__name__} 执行耗时: {elapsed_time:.2f} 秒")
-        return result
-    return wrapper
-
 # 使用 FFmpeg 获取视频基本信息
 def get_video_info(video_path):
     try:
@@ -64,14 +54,22 @@ def get_video_info(video_path):
             bitrate = int(probe['format']['bit_rate']) // 1000  # 转换为 kbps
             fps = eval(video_stream['avg_frame_rate'])  # 计算帧率
             resolution = f"{video_stream['width']}x{video_stream['height']}"
+            
+            # 获取视频时长（秒）
+            duration = float(probe['format']['duration'])
+            # 转换为时:分:秒格式
+            hours = int(duration // 3600)
+            minutes = int((duration % 3600) // 60)
+            seconds = int(duration % 60)
+            duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
         # 获取音频信息
         audio_info = f"{audio_stream['codec_name']} {audio_stream['sample_rate']}Hz" if audio_stream else "无音频信息"
 
-        return bitrate, fps, resolution, audio_info
+        return bitrate, fps, resolution, audio_info, duration_str
     except Exception as e:
         log(f"无法获取视频信息: {e}")
-        return None, None, None, None
+        return None, None, None, None, None
 
 # 修改音频提取函数
 def extract_audio(video_path, output_dir):
@@ -135,7 +133,7 @@ def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
     clips = [f for f in os.listdir(input_dir) if f.startswith("output_") and f.endswith(".mp4")]
     random.shuffle(clips)
     
-    # 创建合并列表文件
+    # 创���合并列表文件
     list_file = os.path.join(input_dir, "concat_list.txt")
     with open(list_file, "w", encoding="utf-8") as f:
         for clip in clips:
@@ -283,14 +281,13 @@ class Scene:
         return self.end_time
 
 # 修改 detect_scenes 函数
-@time_it
 def detect_scenes(video_path, threshold, frame_skip=5):
     """检测场景，如果有缓存则直接加载"""
     # 先尝试加载缓存数据
     cached_scenes = load_scene_data(video_path, threshold)
     if cached_scenes is not None:
         log("使用缓存的场景数据")
-        # 将缓存数据转换回场景列表格式
+        # 将缓存数据转���回场景列表格式
         scene_list = []
         for start, end in cached_scenes:
             scene = Scene(start, end)
@@ -343,10 +340,13 @@ def get_video_fps(video_path):
         return 30.0  # 默认帧率
 
 # 修改主处理函数
-@time_it
 def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False):
+    # 场景检测计时
+    start_detect = time.time()
     log("开始场景检测...")
     scene_list = detect_scenes(video_path, threshold, frame_skip=frame_skip)
+    detect_time = time.time() - start_detect
+    log(f"场景检测耗时: {detect_time:.2f} 秒")
     
     if not scene_list:
         log("未检测到场景，跳过视频分割。")
@@ -359,14 +359,30 @@ def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False)
     audio_path = extract_audio(video_path, output_dir)
     log("已提取原始音频")
     
+    # 分割计时
+    start_split = time.time()
     log("开始视频分割...")
     split_video(video_path, scene_list, output_dir, include_audio=False, merge_random=True)
+    split_time = time.time() - start_split
+    log(f"视频分割耗时: {split_time:.2f} 秒")
     
     output_count = len([f for f in os.listdir(output_dir) if f.endswith(".mp4")])
     log(f"分割完成，共输出 {output_count} 个文件。")
     
+    # 合并计时
+    start_merge = time.time()
     log("开始随机合并片段...")
     merge_random_clips(output_dir, audio_path, keep_temp)
+    merge_time = time.time() - start_merge
+    log(f"随机合并耗时: {merge_time:.2f} 秒")
+    
+    # 显示总耗时统计
+    total_time = detect_time + split_time + merge_time
+    log(f"\n处理完成！总耗时统计：")
+    log(f"场景检测: {detect_time:.2f} 秒 ({(detect_time/total_time*100):.1f}%)")
+    log(f"视频分割: {split_time:.2f} 秒 ({(split_time/total_time*100):.1f}%)")
+    log(f"随机合并: {merge_time:.2f} 秒 ({(merge_time/total_time*100):.1f}%)")
+    log(f"总耗时: {total_time:.2f} 秒")
 
 # 在子线程中运行视频处理，避免阻塞主线程
 def process_video_in_thread():
@@ -388,47 +404,92 @@ def select_video():
         log(f"选择的视频: {video_path.get()}")
 
         # 显示视频基本信息
-        bitrate, fps, resolution, audio_info = get_video_info(video_path.get())
-        log(f"视频信息 - 码率: {bitrate} kbps, 帧率: {fps:.2f} FPS, 分辨率: {resolution}, 音频: {audio_info}")
+        bitrate, fps, resolution, audio_info, duration = get_video_info(video_path.get())
+        log(f"视频信息 - 时长: {duration}, 码率: {bitrate} kbps, 帧率: {fps:.2f} FPS, 分辨率: {resolution}, 音频: {audio_info}")
 
-# 修改GUI部分，在主界面添加新的控制选项
+# 添加 start_processing 函数
+def start_processing(keep_temp):
+    if not video_path.get():
+        log("请先选择视频文件！")
+        return
+        
+    try:
+        threshold = detection_threshold.get()
+        threading.Thread(
+            target=detect_and_split_video,
+            args=(
+                video_path.get(),
+                threshold,
+                5,  # frame_skip
+                keep_temp
+            ),
+            daemon=True
+        ).start()
+    except Exception as e:
+        log(f"处理过程中发生错误: {e}")
+
+# 修改 GUI 布局
 def create_gui():
-    # 添加是否保留临时文件选项
+    # 创建主框架
+    main_frame = Frame(root, padx=20, pady=10)
+    main_frame.pack(fill="both", expand=True)
+    
+    # 文件选择区域
+    file_frame = LabelFrame(main_frame, text="文件选择", padx=10, pady=5)
+    file_frame.pack(fill="x", pady=(0, 10))
+    Button(file_frame, text="选择视频", command=select_video, width=15).pack(pady=5)
+    Label(file_frame, textvariable=video_path, wraplength=600).pack()
+    
+    # 参数设置区域
+    settings_frame = LabelFrame(main_frame, text="参数设置", padx=10, pady=5)
+    settings_frame.pack(fill="x", pady=(0, 10))
+    
+    # 阈值设置
+    threshold_frame = Frame(settings_frame)
+    threshold_frame.pack(fill="x", pady=5)
+    Label(threshold_frame, text="场景检测阈值:").pack(side=LEFT)
+    Scale(threshold_frame, from_=5.0, to=95.0, resolution=5.0, 
+          orient="horizontal", variable=detection_threshold,
+          length=200).pack(side=LEFT, padx=10)
+    Label(threshold_frame, text="(值越小检测越敏感)").pack(side=LEFT)
+    
+    # 选项设置
+    options_frame = Frame(settings_frame)
+    options_frame.pack(fill="x", pady=5)
     keep_temp_var = BooleanVar(value=False)
-    Checkbutton(root, text="保留临时文件", variable=keep_temp_var).pack(pady=5)
+    Checkbutton(options_frame, text="保留临时文件", 
+                variable=keep_temp_var).pack(side=LEFT)
     
-    def start_processing():
-        if not video_path.get():
-            log("请先选择视频文件！")
-            return
-            
-        try:
-            threshold = detection_threshold.get()
-            threading.Thread(
-                target=detect_and_split_video,
-                args=(
-                    video_path.get(),
-                    threshold,
-                    5,  # frame_skip
-                    keep_temp_var.get()
-                ),
-                daemon=True
-            ).start()
-        except Exception as e:
-            log(f"处理过程中发生错误: {e}")
+    # 操作按钮
+    Button(settings_frame, text="开始处理", 
+           command=lambda: start_processing(keep_temp_var.get()), 
+           bg="green", fg="white", width=15, height=1).pack(pady=10)
     
-    Button(root, text="开始处理", command=start_processing, bg="green", fg="white").pack(pady=20)
+    # 日志区域
+    log_frame = LabelFrame(main_frame, text="处理日志", padx=10, pady=5)
+    log_frame.pack(fill="both", expand=True)
+    
+    # 日志列表和滚动条
+    global log_list
+    log_list = Listbox(log_frame, height=15)
+    scrollbar = Scrollbar(log_frame)
+    log_list.pack(side=LEFT, fill="both", expand=True)
+    scrollbar.pack(side=RIGHT, fill="y")
+    log_list.config(yscrollcommand=scrollbar.set)
+    log_list.config(yscrollcommand=scrollbar.set)
 
 # 主程序入口
 if __name__ == "__main__":
     # 初始化 Tkinter 界面
     root = Tk()
     root.title("视频场景分割工具")
-    root.geometry("700x500")
+    root.geometry("800x600")  # 调整窗口大小
+    
+    # 导入必要的 tkinter 组件
+    from tkinter import Frame, LabelFrame, LEFT
     
     # 设置图标
     try:
-        # 获取当前脚本所在目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(current_dir, "app.ico")
         if os.path.exists(icon_path):
@@ -436,32 +497,17 @@ if __name__ == "__main__":
     except Exception as e:
         log(f"加载图标失败: {e}")
 
-    # 检查 FFmpeg 是否已安装
+    # 检查 FFmpeg
     if not check_ffmpeg():
         root.destroy()
         exit(1)
 
     # 定义变量
     video_path = StringVar()
-    detection_threshold = DoubleVar(value=30.0)  # 默认阈值为 30.0
+    detection_threshold = DoubleVar(value=30.0)
 
-    # 界面布局
-    Label(root, text="选择视频文件:").pack(pady=10)
-    Button(root, text="选择视频", command=select_video).pack(pady=5)
-    Label(root, textvariable=video_path, wraplength=600).pack()
-
-    Label(root, text="场景检测阈值 (5-95):").pack(pady=10)
-    Scale(root, from_=5.0, to=95.0, resolution=5.0, orient="horizontal", variable=detection_threshold).pack()
-
+    # 创建界面
     create_gui()
-
-    # 日志显示框
-    log_list = Listbox(root, height=15)
-    log_list.pack(fill="both", expand=True, padx=10, pady=10)
-    scrollbar = Scrollbar(log_list)
-    scrollbar.pack(side=RIGHT, fill=Y)
-    log_list.config(yscrollcommand=scrollbar.set)
-    scrollbar.config(command=log_list.yview)
 
     # 启动主循环
     root.mainloop()
