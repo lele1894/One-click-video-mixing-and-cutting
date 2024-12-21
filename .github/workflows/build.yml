@@ -40,41 +40,18 @@ jobs:
       run: |
         pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "LICENSE;." --add-data "README.md;." --add-binary "ffmpeg.exe;." --name "视频场景分割工具_含FFmpeg" "视频切片合并.py"
     
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create Release and Upload Assets
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.event.inputs.version }}
-        release_name: Release ${{ github.event.inputs.version }}
-        draft: false
-        prerelease: false
-        body: |
-          ### 发布说明
-          
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create ${{ github.event.inputs.version }} `
+          --title "Release ${{ github.event.inputs.version }}" `
+          --notes "### 发布说明
+
           提供两个版本：
           1. 视频场景分割工具_需要FFmpeg.exe：需要自行安装 FFmpeg
           2. 视频场景分割工具_含FFmpeg.exe：已包含 FFmpeg，开箱即用
           
-          请根据需要选择合适的版本下载。
-    
-    - name: Upload Release Asset (without FFmpeg)
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/视频场景分割工具_需要FFmpeg.exe
-        asset_name: 视频场景分割工具_需要FFmpeg.exe
-        asset_content_type: application/octet-stream
-    
-    - name: Upload Release Asset (with FFmpeg)
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/视频场景分割工具_含FFmpeg.exe
-        asset_name: 视频场景分割工具_含FFmpeg.exe
-        asset_content_type: application/octet-stream
+          请根据需要选择合适的版本下载。" `
+          "./dist/视频场景分割工具_需要FFmpeg.exe" `
+          "./dist/视频场景分割工具_含FFmpeg.exe"
