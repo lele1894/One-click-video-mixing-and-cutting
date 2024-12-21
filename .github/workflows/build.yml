@@ -38,7 +38,7 @@ jobs:
           --icon=app.ico `
           --add-data "LICENSE;." `
           --add-data "README.md;." `
-          --name "视频场景分割工具_需要FFmpeg" `
+          --name "video-splitter-no-ffmpeg" `
           "视频切片合并.py"
         dir dist
     
@@ -49,7 +49,7 @@ jobs:
           --add-data "LICENSE;." `
           --add-data "README.md;." `
           --add-binary "ffmpeg.exe;." `
-          --name "视频场景分割工具_含FFmpeg" `
+          --name "video-splitter-with-ffmpeg" `
           "视频切片合并.py"
         dir dist
     
@@ -60,6 +60,12 @@ jobs:
         # 如果标签已存在，先删除它
         gh release delete ${{ github.event.inputs.version }} --yes || true
         git push --delete origin ${{ github.event.inputs.version }} || true
+        
+        # 重命名生成的文件
+        cd dist
+        ren "video-splitter-no-ffmpeg.exe" "视频场景分割工具_需要FFmpeg.exe"
+        ren "video-splitter-with-ffmpeg.exe" "视频场景分割工具_含FFmpeg.exe"
+        cd ..
         
         # 创建新的发布版本
         gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 发布说明
