@@ -34,16 +34,19 @@ jobs:
     
     - name: 构建独立版程序（不含 FFmpeg）
       run: |
+        echo "开始构建不含 FFmpeg 的版本..."
         pyinstaller --noconfirm --onefile --windowed `
           --icon=app.ico `
           --add-data "LICENSE;." `
           --add-data "README.md;." `
           --name "video-splitter-no-ffmpeg" `
           "视频切片合并.py"
+        echo "构建完成，检查 dist 目录："
         dir dist
     
     - name: 构建独立版程序（含 FFmpeg）
       run: |
+        echo "开始构建含 FFmpeg 的版本..."
         pyinstaller --noconfirm --onefile --windowed `
           --icon=app.ico `
           --add-data "LICENSE;." `
@@ -51,23 +54,45 @@ jobs:
           --add-binary "ffmpeg.exe;." `
           --name "video-splitter-with-ffmpeg" `
           "视频切片合并.py"
+        echo "构建完成，检查 dist 目录："
         dir dist
     
     - name: 创建发布版本并上传文件
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        echo "准备创建发布版本..."
+        
         # 如果标签已存在，先删除它
         gh release delete ${{ github.event.inputs.version }} --yes || true
         git push --delete origin ${{ github.event.inputs.version }} || true
         
-        # 重命名生成的文件
+        # 检查并重命名文件
+        echo "检查 dist 目录中的文件："
         cd dist
-        ren "video-splitter-no-ffmpeg.exe" "视频场景分割工具_需要FFmpeg.exe"
-        ren "video-splitter-with-ffmpeg.exe" "视频场景分割工具_含FFmpeg.exe"
+        dir
+        
+        echo "重命名文件..."
+        if (Test-Path "video-splitter-no-ffmpeg.exe") {
+            ren "video-splitter-no-ffmpeg.exe" "视频场景分割工具_需要FFmpeg.exe"
+            echo "已重命名不含 FFmpeg 的版本"
+        } else {
+            echo "错误：找不到 video-splitter-no-ffmpeg.exe"
+        }
+        
+        if (Test-Path "video-splitter-with-ffmpeg.exe") {
+            ren "video-splitter-with-ffmpeg.exe" "视频场景分割工具_含FFmpeg.exe"
+            echo "已重命名含 FFmpeg 的版本"
+        } else {
+            echo "错误：找不到 video-splitter-with-ffmpeg.exe"
+        }
+        
+        echo "重命名后的文件列表："
+        dir
         cd ..
         
         # 创建新的发布版本
+        echo "创建发布版本..."
         gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 发布说明
 
         提供两个版本：
@@ -76,6 +101,12 @@ jobs:
         
         请根据需要选择合适的版本下载。"
 
-        # 分别上传两个文件
+        # 上传文件前再次确认文件存在
+        echo "准备上传文件..."
+        dir dist
+        
+        echo "上传不含 FFmpeg 的版本..."
         gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_需要FFmpeg.exe" --clobber
+        
+        echo "上传含 FFmpeg 的版本..."
         gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_含FFmpeg.exe" --clobber
