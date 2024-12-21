@@ -69,13 +69,13 @@ jobs:
         
         # 创建新的发布版本
         echo "创建发布版本..."
-        gh release create ${{ github.event.inputs.version }} --title "Release ${{ github.event.inputs.version }}" --notes "### Release Notes
+        gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 发布说明
 
-        Two versions available:
-        1. video_splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe: FFmpeg needs to be installed separately
-        2. video_splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe: FFmpeg included, ready to use
+        提供两个版本：
+        1. video_splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe：需要自行安装 FFmpeg
+        2. video_splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe：已包含 FFmpeg，开箱即用
 
-        Please choose the version that suits your needs."
+        请根据需要选择合适的版本下载。"
 
         # 上传文件
         echo "准备上传文件..."
