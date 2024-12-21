@@ -32,6 +32,14 @@ jobs:
         7z x ffmpeg.zip
         move ffmpeg-*-essentials_build\bin\ffmpeg.exe .
     
+    - name: 创建运行时钩子
+      run: |
+        echo 'import os' > runtime_hook.py
+        echo 'import sys' >> runtime_hook.py
+        echo 'if sys.platform == "win32":' >> runtime_hook.py
+        echo '    if hasattr(sys, "_MEIPASS"):' >> runtime_hook.py
+        echo '        os.environ["PATH"] = sys._MEIPASS + os.pathsep + os.environ["PATH"]' >> runtime_hook.py
+    
     - name: 构建独立版程序（不含 FFmpeg）
       run: |
         echo "开始构建不含 FFmpeg 的版本..."
@@ -40,6 +48,7 @@ jobs:
           --add-data "LICENSE;." `
           --add-data "README.md;." `
           --name "video_splitter_no_ffmpeg_${{ github.event.inputs.version }}" `
+          --runtime-hook "runtime_hook.py" `
           "视频切片合并.py"
         echo "构建完成，检查 dist 目录："
         dir dist
@@ -53,6 +62,7 @@ jobs:
           --add-data "README.md;." `
           --add-binary "ffmpeg.exe;." `
           --name "video_splitter_with_ffmpeg_${{ github.event.inputs.version }}" `
+          --runtime-hook "runtime_hook.py" `
           "视频切片合并.py"
         echo "构建完成，检查 dist 目录："
         dir dist
