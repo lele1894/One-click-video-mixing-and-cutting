@@ -39,7 +39,7 @@ jobs:
           --icon=app.ico `
           --add-data "LICENSE;." `
           --add-data "README.md;." `
-          --name "video-splitter-no-ffmpeg" `
+          --name "splitter_no_ffmpeg_${{ github.event.inputs.version }}" `
           "视频切片合并.py"
         echo "构建完成，检查 dist 目录："
         dir dist
@@ -52,7 +52,7 @@ jobs:
           --add-data "LICENSE;." `
           --add-data "README.md;." `
           --add-binary "ffmpeg.exe;." `
-          --name "video-splitter-with-ffmpeg" `
+          --name "splitter_with_ffmpeg_${{ github.event.inputs.version }}" `
           "视频切片合并.py"
         echo "构建完成，检查 dist 目录："
         dir dist
@@ -73,18 +73,21 @@ jobs:
         dir
         
         echo "重命名文件..."
-        if (Test-Path "video-splitter-no-ffmpeg.exe") {
-            ren "video-splitter-no-ffmpeg.exe" "视频场景分割工具_需要FFmpeg.exe"
+        $no_ffmpeg = "splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe"
+        $with_ffmpeg = "splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe"
+        
+        if (Test-Path $no_ffmpeg) {
+            ren $no_ffmpeg "视频场景分割工具_需要FFmpeg.exe"
             echo "已重命名不含 FFmpeg 的版本"
         } else {
-            echo "错误：找不到 video-splitter-no-ffmpeg.exe"
+            echo "错误：找不到 $no_ffmpeg"
         }
         
-        if (Test-Path "video-splitter-with-ffmpeg.exe") {
-            ren "video-splitter-with-ffmpeg.exe" "视频场景分割工具_含FFmpeg.exe"
+        if (Test-Path $with_ffmpeg) {
+            ren $with_ffmpeg "视频场景分割工具_含FFmpeg.exe"
             echo "已重命名含 FFmpeg 的版本"
         } else {
-            echo "错误：找不到 video-splitter-with-ffmpeg.exe"
+            echo "错误：找不到 $with_ffmpeg"
         }
         
         echo "重命名后的文件列表："
