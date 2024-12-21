@@ -39,7 +39,7 @@ jobs:
           --icon=app.ico `
           --add-data "LICENSE;." `
           --add-data "README.md;." `
-          --name "splitter_no_ffmpeg_${{ github.event.inputs.version }}" `
+          --name "video_splitter_no_ffmpeg_${{ github.event.inputs.version }}" `
           "视频切片合并.py"
         echo "构建完成，检查 dist 目录："
         dir dist
@@ -52,7 +52,7 @@ jobs:
           --add-data "LICENSE;." `
           --add-data "README.md;." `
           --add-binary "ffmpeg.exe;." `
-          --name "splitter_with_ffmpeg_${{ github.event.inputs.version }}" `
+          --name "video_splitter_with_ffmpeg_${{ github.event.inputs.version }}" `
           "视频切片合并.py"
         echo "构建完成，检查 dist 目录："
         dir dist
@@ -67,49 +67,22 @@ jobs:
         gh release delete ${{ github.event.inputs.version }} --yes || true
         git push --delete origin ${{ github.event.inputs.version }} || true
         
-        # 检查并重命名文件
-        echo "检查 dist 目录中的文件："
-        cd dist
-        dir
-        
-        echo "重命名文件..."
-        $no_ffmpeg = "splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe"
-        $with_ffmpeg = "splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe"
-        
-        if (Test-Path $no_ffmpeg) {
-            ren $no_ffmpeg "视频场景分割工具_需要FFmpeg.exe"
-            echo "已重命名不含 FFmpeg 的版本"
-        } else {
-            echo "错误：找不到 $no_ffmpeg"
-        }
-        
-        if (Test-Path $with_ffmpeg) {
-            ren $with_ffmpeg "视频场景分割工具_含FFmpeg.exe"
-            echo "已重命名含 FFmpeg 的版本"
-        } else {
-            echo "错误：找不到 $with_ffmpeg"
-        }
-        
-        echo "重命名后的文件列表："
-        dir
-        cd ..
-        
         # 创建新的发布版本
         echo "创建发布版本..."
-        gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 发布说明
+        gh release create ${{ github.event.inputs.version }} --title "Release ${{ github.event.inputs.version }}" --notes "### Release Notes
 
-        提供两个版本：
-        1. 视频场景分割工具_需要FFmpeg.exe：需要自行安装 FFmpeg
-        2. 视频场景分割工具_含FFmpeg.exe：已包含 FFmpeg，开箱即用
-        
-        请根据需要选择合适的版本下载。"
+        Two versions available:
+        1. video_splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe: FFmpeg needs to be installed separately
+        2. video_splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe: FFmpeg included, ready to use
 
-        # 上传文件前再次确认文件存在
+        Please choose the version that suits your needs."
+
+        # 上传文件
         echo "准备上传文件..."
         dir dist
         
         echo "上传不含 FFmpeg 的版本..."
-        gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_需要FFmpeg.exe" --clobber
+        gh release upload ${{ github.event.inputs.version }} "./dist/video_splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe" --clobber
         
         echo "上传含 FFmpeg 的版本..."
-        gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_含FFmpeg.exe" --clobber
+        gh release upload ${{ github.event.inputs.version }} "./dist/video_splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe" --clobber
