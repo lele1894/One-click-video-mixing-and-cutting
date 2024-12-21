@@ -16,27 +16,12 @@ import random
 from pathlib import Path
 import json
 import hashlib
-
-# 检查必要的依赖
-try:
-    import ffmpeg
-except ImportError:
-    print("错误：缺少 ffmpeg-python 模块")
-    print("请运行: pip install ffmpeg-python")
-    input("按回车键退出...")
-    exit(1)
-
-try:
-    from scenedetect import detect, AdaptiveDetector, split_video_ffmpeg
-    from scenedetect.scene_manager import save_images, write_scene_list
-    from scenedetect.stats_manager import StatsManager
-    from scenedetect.video_manager import VideoManager
-    from scenedetect.frame_timecode import FrameTimecode
-except ImportError:
-    print("错误：缺少 scenedetect 模块")
-    print("请运行: pip install scenedetect")
-    input("按回车键退出...")
-    exit(1)
+import ffmpeg
+from scenedetect import detect, AdaptiveDetector, split_video_ffmpeg
+from scenedetect.scene_manager import save_images, write_scene_list
+from scenedetect.stats_manager import StatsManager
+from scenedetect.video_manager import VideoManager
+from scenedetect.frame_timecode import FrameTimecode
 
 # 检查 FFmpeg 是否已安装
 def check_ffmpeg():
@@ -44,6 +29,12 @@ def check_ffmpeg():
         subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
     except FileNotFoundError:
+        messagebox.showerror("错误", 
+            "未找到 FFmpeg!\n\n"
+            "请安装 FFmpeg 并确保已添加到系统环境变量。\n"
+            "Windows 用户可以访问: https://ffmpeg.org/download.html\n"
+            "下载后将 ffmpeg.exe 所在目录添加到系统环境变量 Path 中。"
+        )
         return False
 
 # 日志工具，用于更新日志框
@@ -139,7 +130,7 @@ def split_video(video_path, scene_list, output_dir, include_audio=True, merge_ra
     subprocess.run(ffmpeg_cmd, check=True)
 
 # 修改随机合并函数
-def merge_random_clips(input_dir, audio_path=None):
+def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
     """随机合并视频片段并加原始音频"""
     clips = [f for f in os.listdir(input_dir) if f.startswith("output_") and f.endswith(".mp4")]
     random.shuffle(clips)
@@ -151,29 +142,25 @@ def merge_random_clips(input_dir, audio_path=None):
             f.write(f"file '{os.path.join(input_dir, clip)}'\n")
     
     # 获取原始视频路径信息
-    # 从输出目录名中提取原始视频名（去掉末尾的_阈值）
-    dir_name = os.path.basename(input_dir)  # 例如: video_30
-    original_name = "_".join(dir_name.split("_")[:-1])  # 去掉最后的阈值部分
+    dir_name = os.path.basename(input_dir)
+    original_name = "_".join(dir_name.split("_")[:-1])
     
     # 在原始视频所在目录中查找匹配的视频文件
     video_dir = os.path.dirname(input_dir)
     video_files = [f for f in os.listdir(video_dir) if f.startswith(original_name) and f.endswith((".mp4", ".mkv", ".avi"))]
     
     if video_files:
-        original_video_name = video_files[0]  # 使用找到的第一个匹配文件名
+        original_video_name = video_files[0]
+        base_name = os.path.splitext(original_video_name)[0]
     else:
-        original_video_name = f"{original_name}.mp4"  # 如果找不到，使用默认扩展名
+        base_name = original_name
     
-    # 生成输出文件路径
-    if audio_path:
-        output_path = os.path.join(video_dir, f"{original_video_name}_random_with_audio.mp4")
-    else:
-        output_path = os.path.join(video_dir, f"{original_video_name}_random_no_audio.mp4")
-    
+    # 修改输出文件命名
+    output_path = os.path.join(video_dir, f"{base_name}_s.mp4")
     temp_output = os.path.join(input_dir, "temp_merged.mp4")
     
     try:
-        # 先合并视频片段（不含音频）
+        # 合并视频片段
         subprocess.run([
             "ffmpeg", "-f", "concat", "-safe", "0",
             "-i", list_file,
@@ -191,7 +178,6 @@ def merge_random_clips(input_dir, audio_path=None):
                 output_path
             ], check=True)
         else:
-            # 如果没有音频，直接移动到目标位置
             os.replace(temp_output, output_path)
             
         log(f"随机合并完成: {output_path}")
@@ -199,10 +185,23 @@ def merge_random_clips(input_dir, audio_path=None):
         log(f"合并过程出错: {e}")
     finally:
         # 清理临时文件
-        if os.path.exists(temp_output):
-            os.remove(temp_output)
-        if os.path.exists(list_file):
-            os.remove(list_file)
+        if not keep_temp:
+            # 删除临时文件
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+            if os.path.exists(list_file):
+                os.remove(list_file)
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+            # 删除切片文件夹
+            for clip in clips:
+                clip_path = os.path.join(input_dir, clip)
+                if os.path.exists(clip_path):
+                    os.remove(clip_path)
+            try:
+                os.rmdir(input_dir)
+            except:
+                pass
 
 # 添加计算视频文件 MD5 的函数
 def calculate_video_md5(file_path, block_size=8192):
@@ -336,7 +335,7 @@ def get_video_fps(video_path):
 
 # 修改主处理函数
 @time_it
-def detect_and_split_video(video_path, threshold, frame_skip=5, include_audio=True, merge_random=False):
+def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False):
     log("开始场景检测...")
     scene_list = detect_scenes(video_path, threshold, frame_skip=frame_skip)
     
@@ -347,22 +346,18 @@ def detect_and_split_video(video_path, threshold, frame_skip=5, include_audio=Tr
     output_dir = f"{os.path.splitext(video_path)[0]}_{int(threshold)}"
     log(f"分割视频将存储到目录: {output_dir}")
     
-    # 提取音频（如果需要随机合并）
-    audio_path = None
-    if merge_random:
-        audio_path = extract_audio(video_path, output_dir)
-        log("已提取原始音频用于随机合并")
+    # 提取音频
+    audio_path = extract_audio(video_path, output_dir)
+    log("已提取原始音频")
     
     log("开始视频分割...")
-    # 传递 merge_random 参数
-    split_video(video_path, scene_list, output_dir, include_audio, merge_random)
+    split_video(video_path, scene_list, output_dir, include_audio=False, merge_random=True)
     
     output_count = len([f for f in os.listdir(output_dir) if f.endswith(".mp4")])
     log(f"分割完成，共输出 {output_count} 个文件。")
     
-    if merge_random:
-        log("开始随机合并片段...")
-        merge_random_clips(output_dir, audio_path)
+    log("开始随机合并片段...")
+    merge_random_clips(output_dir, audio_path, keep_temp)
 
 # 在子线程中运行视频处理，避免阻塞主线程
 def process_video_in_thread():
@@ -389,16 +384,10 @@ def select_video():
 
 # 修改GUI部分，在主界面添加新的控制选项
 def create_gui():
-    # ... 原有的GUI代码 ...
+    # 添加是否保留临时文件选项
+    keep_temp_var = BooleanVar(value=False)
+    Checkbutton(root, text="保留临时文件", variable=keep_temp_var).pack(pady=5)
     
-    # 添加新的控制选项
-    include_audio_var = BooleanVar(value=True)
-    Checkbutton(root, text="包含音频", variable=include_audio_var).pack(pady=5)
-    
-    merge_random_var = BooleanVar(value=False)
-    Checkbutton(root, text="随机合成片段", variable=merge_random_var).pack(pady=5)
-    
-    # 修改处理按钮的命令
     def start_processing():
         if not video_path.get():
             log("请先选择视频文件！")
@@ -412,8 +401,7 @@ def create_gui():
                     video_path.get(),
                     threshold,
                     5,  # frame_skip
-                    include_audio_var.get(),
-                    merge_random_var.get()
+                    keep_temp_var.get()
                 ),
                 daemon=True
             ).start()
@@ -424,21 +412,19 @@ def create_gui():
 
 # 主程序入口
 if __name__ == "__main__":
-    # 检查 FFmpeg 是否已安装
-    if not check_ffmpeg():
-        print("错误：未找到 FFmpeg")
-        print("请安装 FFmpeg 并确保已添加到系统环境变量")
-        input("按回车键退出...")
-        exit(1)
-
     # 初始化 Tkinter 界面
     root = Tk()
     root.title("视频场景分割工具")
     root.geometry("700x500")
 
+    # 检查 FFmpeg 是否已安装
+    if not check_ffmpeg():
+        root.destroy()
+        exit(1)
+
     # 定义变量
     video_path = StringVar()
-    detection_threshold = DoubleVar(value=30.0)  # 默阈值为 30.0
+    detection_threshold = DoubleVar(value=30.0)  # 默认阈值为 30.0
 
     # 界面布局
     Label(root, text="选择视频文件:").pack(pady=10)
