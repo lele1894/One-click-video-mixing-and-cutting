@@ -17,7 +17,7 @@ from pathlib import Path
 import json
 import hashlib
 import ffmpeg
-from scenedetect import detect, AdaptiveDetector, split_video_ffmpeg
+from scenedetect import detect, AdaptiveDetector, split_video_ffmpeg, SceneManager, open_video, ContentDetector
 from scenedetect.scene_manager import save_images, write_scene_list
 from scenedetect.stats_manager import StatsManager
 from scenedetect.video_manager import VideoManager
@@ -299,16 +299,25 @@ def detect_scenes(video_path, threshold, frame_skip=5):
     
     # 如果没有缓存，执行检测
     try:
-        # 使用新的 API 进行场景检测
-        scene_manager = detect(video_path, AdaptiveDetector(
-            adaptive_threshold=threshold,
-            min_scene_len=15  # 最小场景长度（帧数）
-        ))
+        # 使用 ContentDetector 进行场景检测
+        video = open_video(video_path)
+        scene_manager = SceneManager()
+        scene_manager.add_detector(
+            ContentDetector(threshold=threshold)
+        )
 
-        # 转换检测结果为场景列表
+        # 只对采样帧进行场景检测
+        scene_manager.detect_scenes(
+            frame_source=video,
+            frame_skip=frame_skip  # 跳过帧数
+        )
+
+        # 获取场景列表
+        detected_scenes = scene_manager.get_scene_list()
+        
+        # 转换为我们的场景对象格式
         scene_list = []
-        for scene in scene_manager:
-            # scene 是一个元组，包含开始和结束时间
+        for scene in detected_scenes:
             start_time = scene[0].get_seconds()
             end_time = scene[1].get_seconds()
             scene_list.append(Scene(start_time, end_time))

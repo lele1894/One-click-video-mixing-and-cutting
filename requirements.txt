@@ -1,2 +1,2 @@
 ffmpeg-python>=0.2.0
-scenedetect>=0.6.1
+scenedetect[opencv]>=0.6.1
