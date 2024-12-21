@@ -34,17 +34,34 @@ jobs:
     
     - name: 构建独立版程序（不含 FFmpeg）
       run: |
-        pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "LICENSE;." --add-data "README.md;." --name "视频场景分割工具_需要FFmpeg" "视频切片合并.py"
+        pyinstaller --noconfirm --onefile --windowed `
+          --icon=app.ico `
+          --add-data "LICENSE;." `
+          --add-data "README.md;." `
+          --name "视频场景分割工具_需要FFmpeg" `
+          "视频切片合并.py"
+        dir dist
     
     - name: 构建独立版程序（含 FFmpeg）
       run: |
-        pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "LICENSE;." --add-data "README.md;." --add-binary "ffmpeg.exe;." --name "视频场景分割工具_含FFmpeg" "视频切片合并.py"
+        pyinstaller --noconfirm --onefile --windowed `
+          --icon=app.ico `
+          --add-data "LICENSE;." `
+          --add-data "README.md;." `
+          --add-binary "ffmpeg.exe;." `
+          --name "视频场景分割工具_含FFmpeg" `
+          "视频切片合并.py"
+        dir dist
     
     - name: 创建发布版本并上传文件
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        # 先创建发布版本
+        # 如果标签已存在，先删除它
+        gh release delete ${{ github.event.inputs.version }} --yes || true
+        git push --delete origin ${{ github.event.inputs.version }} || true
+        
+        # 创建新的发布版本
         gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 发布说明
 
         提供两个版本：
@@ -54,5 +71,5 @@ jobs:
         请根据需要选择合适的版本下载。"
 
         # 分别上传两个文件
-        gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_需要FFmpeg.exe"
-        gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_含FFmpeg.exe"
+        gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_需要FFmpeg.exe" --clobber
+        gh release upload ${{ github.event.inputs.version }} "./dist/视频场景分割工具_含FFmpeg.exe" --clobber
