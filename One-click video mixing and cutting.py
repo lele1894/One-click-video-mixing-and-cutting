@@ -15,6 +15,14 @@ from scenedetect.video_manager import VideoManager
 from scenedetect.frame_timecode import FrameTimecode
 import sys
 
+# 全局变量声明
+def init_globals(root_window):
+    """初始化全局变量"""
+    global log_list, video_path, detection_threshold
+    log_list = None
+    video_path = StringVar(root_window)
+    detection_threshold = DoubleVar(root_window, value=30.0)
+
 # 检查 FFmpeg 是否已安装
 def check_ffmpeg():
     try:
@@ -31,8 +39,12 @@ def check_ffmpeg():
 
 # 日志工具，用于更新日志框
 def log(message):
-    log_list.insert(END, f"[日志] {message}")
-    log_list.yview(END)  # 滚动到最新日志
+    """日志工具，用于更新日志框"""
+    if log_list is not None:
+        log_list.insert(END, f"[日志] {message}")
+        log_list.yview(END)  # 滚动到最新日志
+    else:
+        print(f"[日志] {message}")  # 如果log_list未初始化，则打印到控制台
 
 # 使用 FFmpeg 获取视频基本信息
 def get_video_info(video_path):
@@ -421,7 +433,10 @@ def start_processing(keep_temp):
         log(f"处理过程中发生错误: {e}")
 
 # 修改 GUI 布局
-def create_gui():
+def create_gui(root):
+    """创建GUI界面"""
+    global log_list  # 只在需要修改全局变量时使用global
+    
     # 创建主框架
     main_frame = Frame(root, padx=20, pady=10)
     main_frame.pack(fill="both", expand=True)
@@ -462,31 +477,34 @@ def create_gui():
     log_frame.pack(fill="both", expand=True)
     
     # 日志列表和滚动条
-    global log_list
     log_list = Listbox(log_frame, height=15)
     scrollbar = Scrollbar(log_frame)
     log_list.pack(side=LEFT, fill="both", expand=True)
     scrollbar.pack(side=RIGHT, fill="y")
     log_list.config(yscrollcommand=scrollbar.set)
-    log_list.config(yscrollcommand=scrollbar.set)
+    scrollbar.config(command=log_list.yview)
 
 # 主程序入口
 if __name__ == "__main__":
     # 初始化 Tkinter 界面
     root = Tk()
     root.title("一键视频混剪.QQ273356663")
-    root.geometry("800x600")  # 调整窗口大小
+    root.geometry("800x600")
     
     # 导入必要的 tkinter 组件
     from tkinter import Frame, LabelFrame, LEFT
     
+    # 初始化全局变量
+    init_globals(root)
+    
+    # 创建界面
+    create_gui(root)
+    
     # 设置图标
     try:
         if hasattr(sys, '_MEIPASS'):
-            # 如果是打包后的程序，从打包资源中加载图标
             icon_path = os.path.join(sys._MEIPASS, "app.ico")
         else:
-            # 如果是直接运行的脚本，从当前目录加载图标
             current_dir = os.path.dirname(os.path.abspath(__file__))
             icon_path = os.path.join(current_dir, "app.ico")
             
@@ -502,13 +520,6 @@ if __name__ == "__main__":
     if not check_ffmpeg():
         root.destroy()
         exit(1)
-
-    # 定义变量
-    video_path = StringVar()
-    detection_threshold = DoubleVar(value=30.0)
-
-    # 创建界面
-    create_gui()
 
     # 启动主循环
     root.mainloop()
