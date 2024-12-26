@@ -26,12 +26,6 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: 下载 FFmpeg
-      run: |
-        curl -L https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -o ffmpeg.zip
-        7z x ffmpeg.zip
-        move ffmpeg-*-essentials_build\bin\ffmpeg.exe .
-    
     - name: 创建运行时钩子
       run: |
         echo 'import os' > runtime_hook.py
@@ -40,30 +34,25 @@ jobs:
         echo '    if hasattr(sys, "_MEIPASS"):' >> runtime_hook.py
         echo '        os.environ["PATH"] = sys._MEIPASS + os.pathsep + os.environ["PATH"]' >> runtime_hook.py
     
-    - name: 构建独立版程序（不含 FFmpeg）
+    - name: 检查图标文件
       run: |
-        echo "开始构建不含 FFmpeg 的版本..."
-        pyinstaller --noconfirm --onefile --windowed `
-          --icon=app.ico `
-          --add-data "LICENSE;." `
-          --add-data "README.md;." `
-          --name "video_splitter_no_ffmpeg_${{ github.event.inputs.version }}" `
-          --runtime-hook "runtime_hook.py" `
-          "视频切片合并.py"
-        echo "构建完成，检查 dist 目录："
-        dir dist
+        if (Test-Path "app.ico") {
+            echo "找到图标文件 app.ico"
+        } else {
+            echo "警告: 未找到 app.ico 文件，将使用默认图标"
+        }
     
-    - name: 构建独立版程序（含 FFmpeg）
+    - name: 构建独立版程序
       run: |
-        echo "开始构建含 FFmpeg 的版本..."
+        echo "开始构建..."
         pyinstaller --noconfirm --onefile --windowed `
           --icon=app.ico `
+          --add-data "app.ico;." `
           --add-data "LICENSE;." `
           --add-data "README.md;." `
-          --add-binary "ffmpeg.exe;." `
-          --name "video_splitter_with_ffmpeg_${{ github.event.inputs.version }}" `
+          --name "One-click video mixing and cutting_${{ github.event.inputs.version }}" `
           --runtime-hook "runtime_hook.py" `
-          "视频切片合并.py"
+          "One-click video mixing and cutting.py"
         echo "构建完成，检查 dist 目录："
         dir dist
     
@@ -79,20 +68,16 @@ jobs:
         
         # 创建新的发布版本
         echo "创建发布版本..."
-        gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 发布说明
+        gh release create ${{ github.event.inputs.version }} --title "发布 ${{ github.event.inputs.version }}" --notes "### 使用说明
 
-        提供两个版本：
-        1. video_splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe：需要自行安装 FFmpeg
-        2. video_splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe：已包含 FFmpeg，开箱即用
-
-        请根据需要选择合适的版本下载。"
+        使用前请确保已安装 FFmpeg 并添加到系统环境变量。
+        
+        Windows 用户可以从 https://ffmpeg.org/download.html 下载 FFmpeg，
+        解压后将 ffmpeg.exe 所在目录添加到系统环境变量 Path 中。"
 
         # 上传文件
         echo "准备上传文件..."
         dir dist
         
-        echo "上传不含 FFmpeg 的版本..."
-        gh release upload ${{ github.event.inputs.version }} "./dist/video_splitter_no_ffmpeg_${{ github.event.inputs.version }}.exe" --clobber
-        
-        echo "上传含 FFmpeg 的版本..."
-        gh release upload ${{ github.event.inputs.version }} "./dist/video_splitter_with_ffmpeg_${{ github.event.inputs.version }}.exe" --clobber
+        echo "上传程序..."
+        gh release upload ${{ github.event.inputs.version }} "./dist/One-click video mixing and cutting_${{ github.event.inputs.version }}.exe" --clobber

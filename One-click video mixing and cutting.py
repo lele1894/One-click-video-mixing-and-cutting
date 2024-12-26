@@ -1,12 +1,3 @@
-"""
-系统要求：
-1. Python 3.6+
-2. FFmpeg 已安装并添加到系统环境变量
-3. 依赖包：
-   - ffmpeg-python
-   - scenedetect
-"""
-
 import os
 import time
 import subprocess
@@ -22,6 +13,7 @@ from scenedetect.scene_manager import save_images, write_scene_list
 from scenedetect.stats_manager import StatsManager
 from scenedetect.video_manager import VideoManager
 from scenedetect.frame_timecode import FrameTimecode
+import sys
 
 # 检查 FFmpeg 是否已安装
 def check_ffmpeg():
@@ -133,7 +125,7 @@ def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
     clips = [f for f in os.listdir(input_dir) if f.startswith("output_") and f.endswith(".mp4")]
     random.shuffle(clips)
     
-    # 创���合并列表文件
+    # 创建合并列表文件
     list_file = os.path.join(input_dir, "concat_list.txt")
     with open(list_file, "w", encoding="utf-8") as f:
         for clip in clips:
@@ -162,7 +154,7 @@ def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
         subprocess.run([
             "ffmpeg", "-f", "concat", "-safe", "0",
             "-i", list_file,
-            "-c", "copy",
+            "-c", "copy", "-y",
             temp_output
         ], check=True)
         
@@ -172,7 +164,7 @@ def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
                 "ffmpeg", "-i", temp_output,
                 "-i", audio_path,
                 "-c", "copy",
-                "-map", "0:v:0", "-map", "1:a:0",
+                "-map", "0:v:0", "-map", "1:a:0", "-y",
                 output_path
             ], check=True)
         else:
@@ -287,7 +279,7 @@ def detect_scenes(video_path, threshold, frame_skip=5):
     cached_scenes = load_scene_data(video_path, threshold)
     if cached_scenes is not None:
         log("使用缓存的场景数据")
-        # 将缓存数据转���回场景列表格式
+        # 将缓存数据转换回场景列表格式
         scene_list = []
         for start, end in cached_scenes:
             scene = Scene(start, end)
@@ -482,7 +474,7 @@ def create_gui():
 if __name__ == "__main__":
     # 初始化 Tkinter 界面
     root = Tk()
-    root.title("视频场景分割工具")
+    root.title("一键视频混剪.QQ273356663")
     root.geometry("800x600")  # 调整窗口大小
     
     # 导入必要的 tkinter 组件
@@ -490,10 +482,19 @@ if __name__ == "__main__":
     
     # 设置图标
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(current_dir, "app.ico")
+        if hasattr(sys, '_MEIPASS'):
+            # 如果是打包后的程序，从打包资源中加载图标
+            icon_path = os.path.join(sys._MEIPASS, "app.ico")
+        else:
+            # 如果是直接运行的脚本，从当前目录加载图标
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            icon_path = os.path.join(current_dir, "app.ico")
+            
         if os.path.exists(icon_path):
             root.iconbitmap(icon_path)
+            log("成功加载应用图标")
+        else:
+            log("未找到图标文件 app.ico")
     except Exception as e:
         log(f"加载图标失败: {e}")
 
