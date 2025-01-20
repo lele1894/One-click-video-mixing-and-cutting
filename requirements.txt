@@ -1,5 +1,5 @@
 ffmpeg-python>=0.2.0
 scenedetect[opencv]>=0.6.1
-opencv-python>=4.5.0
+opencv-python-headless-cuda>=4.5.0
 Pillow>=8.0.0
 numpy>=1.19.0
