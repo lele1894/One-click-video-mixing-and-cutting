@@ -486,14 +486,17 @@ def select_folder():
         for file in video_files:
             log(f"- {file}")
         
-        # 生成输出文件名
-        output_file = os.path.join(folder_path, "merged.mp4")
+        # 获取上级目录和当前文件夹名
+        parent_dir = os.path.dirname(folder_path)
+        current_folder_name = os.path.basename(folder_path)
+        
+        # 生成输出文件名（使用当前文件夹名）
+        output_file = os.path.join(parent_dir, f"{current_folder_name}_merged.mp4")
         
         # 如果文件已存在，添加数字后缀
         counter = 1
         while os.path.exists(output_file):
-            base_name = "merged"
-            output_file = os.path.join(folder_path, f"{base_name}_{counter}.mp4")
+            output_file = os.path.join(parent_dir, f"{current_folder_name}_merged_{counter}.mp4")
             counter += 1
         
         # 在新线程中执行合并
@@ -506,7 +509,7 @@ def select_folder():
 def merge_folder_videos(folder_path, video_files, output_file):
     """合并文件夹中的视频文件"""
     try:
-        # 创建合并列表文件
+        # 创建合并列表文件（保存在源文件夹中）
         list_file = os.path.join(folder_path, 'concat_list.txt')
         with open(list_file, 'w', encoding='utf-8') as f:
             for video in video_files:
@@ -529,26 +532,15 @@ def merge_folder_videos(folder_path, video_files, output_file):
         ], check=True)
         
         merge_time = time.time() - start_time
-        log(f"合并完成: {os.path.basename(output_file)}")
+        log(f"合并完成，输出文件: {output_file}")
         log(f"合并耗时: {merge_time:.2f} 秒")
         
-        # 清理临时文件
-        os.remove(list_file)
-        
-        # 打开输出文件所在目录
-        try:
-            if os.name == 'nt':  # Windows
-                os.startfile(folder_path)
-            else:  # Linux/Mac
-                subprocess.run(['xdg-open', folder_path])
-        except Exception as e:
-            log(f"无法打开输出目录: {e}")
-            
     except subprocess.CalledProcessError as e:
         log(f"合并失败: {e.stderr.decode() if hasattr(e, 'stderr') else str(e)}")
     except Exception as e:
         log(f"合并过程出错: {e}")
     finally:
+        # 清理临时文件
         if os.path.exists(list_file):
             os.remove(list_file)
 
