@@ -18,10 +18,12 @@ import sys
 # 全局变量声明
 def init_globals(root_window):
     """初始化全局变量"""
-    global log_list, video_path, detection_threshold
+    global log_list, video_path, detection_threshold, batch_video_paths, audio_follow_var
     log_list = None
     video_path = StringVar(root_window)
     detection_threshold = DoubleVar(root_window, value=30.0)
+    batch_video_paths = []
+    audio_follow_var = BooleanVar(value=True)  # 默认启用音频跟随
 
 # 检查 FFmpeg 是否已安装
 def check_ffmpeg():
@@ -35,6 +37,21 @@ def check_ffmpeg():
             "Windows 用户可以访问: https://ffmpeg.org/download.html\n"
             "下载后将 ffmpeg.exe 所在目录添加到系统环境变量 Path 中。"
         )
+        return False
+
+def check_gpu():
+    """检查 GPU 是否可用"""
+    try:
+        import cv2
+        cuda_count = cv2.cuda.getCudaEnabledDeviceCount()
+        if cuda_count > 0:
+            log(f"检测到 {cuda_count} 个支持 CUDA 的 NVIDIA GPU")
+            return True
+        else:
+            log("未找到支持 CUDA 的 GPU，将使用 CPU 处理")
+            return False
+    except Exception as e:
+        log(f"GPU 检测失败: {e}")
         return False
 
 # 日志工具，用于更新日志框
@@ -53,6 +70,12 @@ def get_video_info(video_path):
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         audio_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
 
+        # 初始化变量
+        bitrate = None
+        fps = None
+        resolution = None
+        duration_str = None
+        
         # 获取视频信息
         if video_stream:
             bitrate = int(probe['format']['bit_rate']) // 1000  # 转换为 kbps
@@ -97,13 +120,14 @@ def extract_audio(video_path, output_dir):
         return None
 
 # 修改split_video函，添加无音频选项
-def split_video(video_path, scene_list, output_dir, include_audio=True, merge_random=False):
+def split_video(video_path, scene_list, output_dir, include_audio=True, merge_random=False, audio_follow=True):
     """分割视频
     :param video_path: 视频路径
     :param scene_list: 场景列表
     :param output_dir: 输出目录
     :param include_audio: 是否包含音频
     :param merge_random: 是否需要随机合并
+    :param audio_follow: 是否让音频跟随视频一起剪辑
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -119,7 +143,10 @@ def split_video(video_path, scene_list, output_dir, include_audio=True, merge_ra
         "-avoid_negative_ts", "make_zero",
     ]
     
-    if include_audio and not merge_random:
+    if audio_follow:
+        # 音频跟随视频一起剪辑 - 保留音视频流
+        ffmpeg_cmd.extend(["-c", "copy"])
+    elif include_audio and not merge_random:
         # 只有在不需要随机合并时才保留音频
         ffmpeg_cmd.extend(["-c", "copy"])
     else:
@@ -132,7 +159,7 @@ def split_video(video_path, scene_list, output_dir, include_audio=True, merge_ra
     subprocess.run(ffmpeg_cmd, check=True)
 
 # 修改随机合并函数
-def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
+def merge_random_clips(input_dir, audio_path=None, keep_temp=False, audio_follow=False):
     """随机合并视频片段并加原始音频"""
     clips = [f for f in os.listdir(input_dir) if f.startswith("output_") and f.endswith(".mp4")]
     random.shuffle(clips)
@@ -170,7 +197,11 @@ def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
             temp_output
         ], check=True)
         
-        if audio_path:
+        if audio_follow:
+            # 如果音频跟随视频一起剪辑，那么片段中已经包含了音频，不需要额外添加
+            os.replace(temp_output, output_path)
+            log(f"随机合并完成（音频跟随视频）: {output_path}")
+        elif audio_path:
             # 添加原始音频
             subprocess.run([
                 "ffmpeg", "-i", temp_output,
@@ -193,7 +224,7 @@ def merge_random_clips(input_dir, audio_path=None, keep_temp=False):
                 os.remove(temp_output)
             if os.path.exists(list_file):
                 os.remove(list_file)
-            if os.path.exists(audio_path):
+            if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
             # 删除切片文件夹
             for clip in clips:
@@ -343,8 +374,24 @@ def get_video_fps(video_path):
     except Exception:
         return 30.0  # 默认帧率
 
+# 批量处理视频
+def batch_process_videos(video_paths, threshold, frame_skip=5, keep_temp=False, audio_follow=False):
+    """批量处理视频"""
+    log(f"开始批量处理 {len(video_paths)} 个视频...")
+    total_start_time = time.time()
+    
+    for i, video_path in enumerate(video_paths):
+        log(f"正在处理第 {i+1}/{len(video_paths)} 个视频: {os.path.basename(video_path)}")
+        try:
+            detect_and_split_video(video_path, threshold, frame_skip, keep_temp, audio_follow)
+        except Exception as e:
+            log(f"处理视频 {video_path} 时出错: {e}")
+    
+    total_time = time.time() - total_start_time
+    log(f"批量处理完成! 总耗时: {total_time:.2f} 秒")
+
 # 修改主处理函数
-def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False):
+def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False, audio_follow=False):
     # 场景检测计时
     start_detect = time.time()
     log("开始场景检测...")
@@ -359,14 +406,19 @@ def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False)
     output_dir = f"{os.path.splitext(video_path)[0]}_{int(threshold)}"
     log(f"分割视频将存储到目录: {output_dir}")
     
-    # 提取音频
-    audio_path = extract_audio(video_path, output_dir)
-    log("已提取原始音频")
+    # 根据音频跟随选项决定是否提取音频
+    audio_path = None
+    if not audio_follow:
+        # 只有在不启用音频跟随时才提取音频
+        audio_path = extract_audio(video_path, output_dir)
+        log("已提取原始音频")
+    else:
+        log("音频跟随视频一起剪辑，无需单独提取音频")
     
     # 分割计时
     start_split = time.time()
     log("开始视频分割...")
-    split_video(video_path, scene_list, output_dir, include_audio=False, merge_random=True)
+    split_video(video_path, scene_list, output_dir, include_audio=False, merge_random=True, audio_follow=audio_follow)
     split_time = time.time() - start_split
     log(f"视频分割耗时: {split_time:.2f} 秒")
     
@@ -376,7 +428,7 @@ def detect_and_split_video(video_path, threshold, frame_skip=5, keep_temp=False)
     # 合并计时
     start_merge = time.time()
     log("开始随机合并片段...")
-    merge_random_clips(output_dir, audio_path, keep_temp)
+    merge_random_clips(output_dir, audio_path, keep_temp, audio_follow)
     merge_time = time.time() - start_merge
     log(f"随机合并耗时: {merge_time:.2f} 秒")
     
@@ -396,9 +448,40 @@ def process_video_in_thread():
 
     try:
         threshold = detection_threshold.get()
-        threading.Thread(target=detect_and_split_video, args=(video_path.get(), threshold), daemon=True).start()
+        audio_follow = audio_follow_var.get()
+        threading.Thread(target=detect_and_split_video, args=(video_path.get(), threshold, 5, False, audio_follow), daemon=True).start()
     except Exception as e:
         log(f"处理过程中发生错误: {e}")
+
+# 批量选择视频文件
+def select_batch_videos():
+    paths = filedialog.askopenfilenames(
+        title="选择多个视频文件", 
+        filetypes=[("视频文件", "*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm")]
+    )
+    if paths:
+        global batch_video_paths
+        batch_video_paths = list(paths)
+        log(f"选择了 {len(batch_video_paths)} 个视频文件进行批量处理")
+        for path in batch_video_paths:
+            log(f"- {os.path.basename(path)}")
+
+# 批量处理视频线程
+def batch_process_in_thread():
+    if not batch_video_paths:
+        log("请先选择要批量处理的视频文件！")
+        return
+    
+    try:
+        threshold = detection_threshold.get()
+        audio_follow = audio_follow_var.get()
+        threading.Thread(
+            target=batch_process_videos, 
+            args=(batch_video_paths, threshold, 5, False, audio_follow), 
+            daemon=True
+        ).start()
+    except Exception as e:
+        log(f"批量处理过程中发生错误: {e}")
 
 # GUI 主界面
 def select_video():
@@ -419,13 +502,15 @@ def start_processing(keep_temp):
         
     try:
         threshold = detection_threshold.get()
+        audio_follow = audio_follow_var.get()
         threading.Thread(
             target=detect_and_split_video,
             args=(
                 video_path.get(),
                 threshold,
                 5,  # frame_skip
-                keep_temp
+                keep_temp,
+                audio_follow
             ),
             daemon=True
         ).start()
@@ -444,7 +529,14 @@ def create_gui(root):
     # 文件选择区域
     file_frame = LabelFrame(main_frame, text="文件选择", padx=10, pady=5)
     file_frame.pack(fill="x", pady=(0, 10))
-    Button(file_frame, text="选择视频", command=select_video, width=15).pack(pady=5)
+    
+    # 添加按钮框架
+    button_frame = Frame(file_frame)
+    button_frame.pack(pady=5)
+    
+    Button(button_frame, text="选择视频", command=select_video, width=12).pack(side=LEFT, padx=5)
+    Button(button_frame, text="批量选择", command=select_batch_videos, width=12).pack(side=LEFT, padx=5)
+    
     Label(file_frame, textvariable=video_path, wraplength=600).pack()
     
     # 参数设置区域
@@ -465,12 +557,24 @@ def create_gui(root):
     options_frame.pack(fill="x", pady=5)
     keep_temp_var = BooleanVar(value=False)
     Checkbutton(options_frame, text="保留临时文件", 
-                variable=keep_temp_var).pack(side=LEFT)
+                variable=keep_temp_var).pack(side=LEFT, padx=10)
+    
+    # 音频跟随选项
+    global audio_follow_var
+    Checkbutton(options_frame, text="音频跟随视频剪辑", 
+                variable=audio_follow_var).pack(side=LEFT)
     
     # 操作按钮
-    Button(settings_frame, text="开始处理", 
+    buttons_frame = Frame(settings_frame)
+    buttons_frame.pack(pady=10)
+    
+    Button(buttons_frame, text="单个处理", 
            command=lambda: start_processing(keep_temp_var.get()), 
-           bg="green", fg="white", width=15, height=1).pack(pady=10)
+           bg="green", fg="white", width=12, height=1).pack(side=LEFT, padx=5)
+           
+    Button(buttons_frame, text="批量处理", 
+           command=batch_process_in_thread, 
+           bg="blue", fg="white", width=12, height=1).pack(side=LEFT, padx=5)
     
     # 日志区域
     log_frame = LabelFrame(main_frame, text="处理日志", padx=10, pady=5)
@@ -492,7 +596,7 @@ if __name__ == "__main__":
     root.geometry("800x600")
     
     # 导入必要的 tkinter 组件
-    from tkinter import Frame, LabelFrame, LEFT
+    from tkinter import Frame, LabelFrame
     
     # 初始化全局变量
     init_globals(root)
@@ -502,9 +606,12 @@ if __name__ == "__main__":
     
     # 设置图标
     try:
+        # 检查是否在打包环境中
         if hasattr(sys, '_MEIPASS'):
+            # 打包环境中的临时目录
             icon_path = os.path.join(sys._MEIPASS, "app.ico")
         else:
+            # 开发环境中的当前目录
             current_dir = os.path.dirname(os.path.abspath(__file__))
             icon_path = os.path.join(current_dir, "app.ico")
             
@@ -521,5 +628,8 @@ if __name__ == "__main__":
         root.destroy()
         exit(1)
 
+    # 检查 GPU
+    check_gpu()
+    
     # 启动主循环
     root.mainloop()
